@@ -25,12 +25,20 @@ def draw_cluster_ellipse(ax, points, color, alpha=0.15, n_std=2.0):
     width = 2 * n_std * np.sqrt(max(eigenvalues[0], 0))
     height = 2 * n_std * np.sqrt(max(eigenvalues[1], 0))
 
-    ellipse = Ellipse(
+    # Filled semi-transparent background
+    ellipse_fill = Ellipse(
         xy=mean, width=width, height=height, angle=angle,
-        facecolor=color, alpha=alpha, edgecolor=color,
-        linewidth=2, linestyle="--",
+        facecolor=color, edgecolor="none", alpha=alpha
     )
-    ax.add_patch(ellipse)
+    ax.add_patch(ellipse_fill)
+
+    # Solid, thick edge for clear, visible boundary
+    ellipse_edge = Ellipse(
+        xy=mean, width=width, height=height, angle=angle,
+        facecolor="none", edgecolor=color,
+        linewidth=3, linestyle="-", alpha=0.9
+    )
+    ax.add_patch(ellipse_edge)
 
 
 def plot_clusters_detailed(ax, data, labels, n_clusters, title,
@@ -54,7 +62,7 @@ def plot_clusters_detailed(ax, data, labels, n_clusters, title,
         centroid = pts.mean(axis=0)
 
         if show_ellipses and len(pts) > 10:
-            draw_cluster_ellipse(ax, pts, color, alpha=0.12, n_std=2.0)
+            draw_cluster_ellipse(ax, pts, color, alpha=0.20, n_std=2.0)
 
         ax.scatter(
             pts[:, 0], pts[:, 1],
