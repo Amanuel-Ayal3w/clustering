@@ -66,172 +66,176 @@ class HDBSCAN:
         edges_sorted = sorted(edges, key=lambda e: e[0])
         mcs = self.min_cluster_size
 
-        uf_parent = np.arange(n)
-        uf_size = np.ones(n, dtype=int)
-
-        def uf_find(x):
+        tree = []
+        uf_parent = {i: i for i in range(n)}
+        
+        def find(x):
             while uf_parent[x] != x:
                 uf_parent[x] = uf_parent[uf_parent[x]]
                 x = uf_parent[x]
             return x
 
-        next_cluster_id = n
-        cluster_birth = {}
-        cluster_children = {}
-        cluster_stability = {}
-        cluster_points = {}
-        root_to_cluster = {}
+        cluster_size = {i: 1 for i in range(n)}
+        node_id_map = {i: i for i in range(n)}
+        current_cluster = n
 
-        for weight, u, v in edges_sorted:
-            ru, rv = uf_find(u), uf_find(v)
-            if ru == rv:
-                continue
-
-            lam = 1.0 / weight if weight > 0 else float("inf")
-            sz_u, sz_v = uf_size[ru], uf_size[rv]
-
-            if sz_u < sz_v:
-                ru, rv = rv, ru
-                sz_u, sz_v = sz_v, sz_u
-
-            cl_u = root_to_cluster.get(ru)
-            cl_v = root_to_cluster.get(rv)
-
-            if sz_u >= mcs and sz_v >= mcs:
-                new_cl = next_cluster_id
-                next_cluster_id += 1
-                cluster_birth[new_cl] = lam
-                cluster_children[new_cl] = []
-                cluster_stability[new_cl] = 0.0
-
-                for cl_ref, component_root in [(cl_u, ru), (cl_v, rv)]:
-                    if cl_ref is not None:
-                        cluster_children[new_cl].append(cl_ref)
-                    else:
-                        leaf = next_cluster_id
-                        next_cluster_id += 1
-                        cluster_birth[leaf] = lam
-                        cluster_children[leaf] = []
-                        cluster_stability[leaf] = 0.0
-                        cluster_points[leaf] = set()
-                        cluster_children[new_cl].append(leaf)
-
-                uf_parent[rv] = ru
-                uf_size[ru] += uf_size[rv]
-                root_to_cluster[ru] = new_cl
-            else:
-                if cl_u is not None:
-                    cluster_stability[cl_u] += sz_v * (lam - cluster_birth.get(cl_u, lam))
-
-                uf_parent[rv] = ru
-                uf_size[ru] += uf_size[rv]
-                if cl_u is not None:
-                    root_to_cluster[ru] = cl_u
-                elif cl_v is not None:
-                    root_to_cluster[ru] = cl_v
-
-        all_clusters = [c for c in cluster_birth if c >= n]
-
-        # Bottom-up stability selection
-        selected = set()
-        propagated_stability = dict(cluster_stability)
-
-        for cl in all_clusters:
-            child_clusters = [c for c in cluster_children.get(cl, []) if c in cluster_birth and c >= n]
-            if not child_clusters:
-                selected.add(cl)
-
-        internal_sorted = sorted(
-            [cl for cl in all_clusters if cluster_children.get(cl, [])],
-            key=lambda c: -cluster_birth.get(c, 0),
-        )
-
-        for cl in internal_sorted:
-            child_clusters = [c for c in cluster_children.get(cl, []) if c in cluster_birth and c >= n]
-            if not child_clusters:
-                continue
-
-            child_stab_sum = sum(propagated_stability.get(c, 0) for c in child_clusters)
-            own_stab = cluster_stability.get(cl, 0)
-
-            if own_stab >= child_stab_sum:
-                for c in child_clusters:
-                    selected.discard(c)
-                selected.add(cl)
-                propagated_stability[cl] = own_stab
-            else:
-                propagated_stability[cl] = child_stab_sum
-
-        # Assign points to selected clusters
-        if not selected:
-            self._fallback_largest_gap(edges_sorted, n, mcs)
-            return
-
-        self._assign_by_cut(edges_sorted, n, selected, cluster_birth, mcs)
-
-    def _fallback_largest_gap(self, edges_sorted, n, mcs):
-        weights = [e[0] for e in edges_sorted]
-        cut_dist = weights[np.argmax(np.diff(weights))] if len(weights) > 1 else 0
-
-        uf = np.arange(n)
-        uf_sz = np.ones(n, dtype=int)
-
-        def find(x):
-            while uf[x] != x:
-                uf[x] = uf[uf[x]]
-                x = uf[x]
-            return x
-
+        # 1. Build Single Linkage Dendrogram
         for w, a, b in edges_sorted:
-            if w > cut_dist:
-                break
             ra, rb = find(a), find(b)
-            if ra != rb:
-                if uf_sz[ra] < uf_sz[rb]:
-                    ra, rb = rb, ra
-                uf[rb] = ra
-                uf_sz[ra] += uf_sz[rb]
+            if ra == rb:
+                continue
+            
+            id_a, id_b = node_id_map[ra], node_id_map[rb]
+            sz_a, sz_b = cluster_size[id_a], cluster_size[id_b]
+            new_sz = sz_a + sz_b
+            
+            tree.append({
+                'id': current_cluster,
+                'left': id_a,
+                'right': id_b,
+                'dist': w,
+                'size': new_sz
+            })
+            
+            cluster_size[current_cluster] = new_sz
+            uf_parent[rb] = ra
+            node_id_map[ra] = current_cluster
+            current_cluster += 1
 
-        raw = np.array([find(i) for i in range(n)])
-        lbl_map, cid = {}, 0
-        for root in np.unique(raw):
-            lbl_map[root] = cid if np.sum(raw == root) >= mcs else -1
-            if lbl_map[root] >= 0:
-                cid += 1
-        self.labels = np.array([lbl_map[r] for r in raw])
-        self.n_clusters = cid
+        children_dict = {n_node['id']: (n_node['left'], n_node['right'], n_node['dist']) for n_node in tree}
+        size_dict = {n_node['id']: n_node['size'] for n_node in tree}
+        for i in range(n): 
+            size_dict[i] = 1
 
-    def _assign_by_cut(self, edges_sorted, n, selected, cluster_birth, mcs):
-        uf = np.arange(n)
-        uf_sz = np.ones(n, dtype=int)
+        def get_leaves(n_id):
+            stack = [n_id]
+            leaves = []
+            while stack:
+                curr = stack.pop()
+                if curr < n:
+                    leaves.append(curr)
+                else:
+                    left, right, _ = children_dict[curr]
+                    stack.append(left)
+                    stack.append(right)
+            return leaves
 
-        def find(x):
-            while uf[x] != x:
-                uf[x] = uf[uf[x]]
-                x = uf[x]
-            return x
+        # 2. Build Condensed Tree
+        root_node_id = 2 * n - 2
+        cluster_info = {0: {'birth': 0.0, 'points': [], 'children': []}}
+        next_cluster_id = 1
+        node_to_cluster = {root_node_id: 0}
 
-        min_birth_lambda = min(cluster_birth.get(c, 0) for c in selected)
-        cut_distance = 1.0 / min_birth_lambda if min_birth_lambda > 0 else float("inf")
+        stack = [root_node_id]
+        while stack:
+            node = stack.pop()
+            if node < n: 
+                continue
+            
+            left, right, dist = children_dict[node]
+            lam = 1.0 / dist if dist > 0 else float("inf")
+            
+            sz_left, sz_right = size_dict[left], size_dict[right]
+            cl_id = node_to_cluster[node]
+            
+            if sz_left >= mcs and sz_right >= mcs:
+                cl_left, cl_right = next_cluster_id, next_cluster_id + 1
+                next_cluster_id += 2
+                
+                cluster_info[cl_id]['children'].extend([cl_left, cl_right])
+                cluster_info[cl_id]['death'] = lam
+                
+                cluster_info[cl_left] = {'birth': lam, 'points': [], 'children': []}
+                cluster_info[cl_right] = {'birth': lam, 'points': [], 'children': []}
+                
+                node_to_cluster[left] = cl_left
+                node_to_cluster[right] = cl_right
+                
+                stack.extend([left, right])
+                
+            elif sz_left >= mcs and sz_right < mcs:
+                node_to_cluster[left] = cl_id
+                for p in get_leaves(right):
+                    cluster_info[cl_id]['points'].append((p, lam))
+                stack.append(left)
+                
+            elif sz_right >= mcs and sz_left < mcs:
+                node_to_cluster[right] = cl_id
+                for p in get_leaves(left):
+                    cluster_info[cl_id]['points'].append((p, lam))
+                stack.append(right)
+                
+            else:
+                cluster_info[cl_id]['death'] = lam
+                for p in get_leaves(left):
+                    cluster_info[cl_id]['points'].append((p, lam))
+                for p in get_leaves(right):
+                    cluster_info[cl_id]['points'].append((p, lam))
 
-        for w, a, b in edges_sorted:
-            if w > cut_distance:
-                break
-            ra, rb = find(a), find(b)
-            if ra != rb:
-                if uf_sz[ra] < uf_sz[rb]:
-                    ra, rb = rb, ra
-                uf[rb] = ra
-                uf_sz[ra] += uf_sz[rb]
+        # 3. Compute Stability
+        def compute_stability(c):
+            stab = 0.0
+            for p, lam in cluster_info[c]['points']:
+                stab += (lam - cluster_info[c]['birth'])
+            if 'death' in cluster_info[c]:
+                death_lam = cluster_info[c]['death']
+                size_at_death = 0
+                child_stack = list(cluster_info[c]['children'])
+                while child_stack:
+                    curr = child_stack.pop()
+                    size_at_death += len(cluster_info[curr]['points'])
+                    child_stack.extend(cluster_info[curr]['children'])
+                stab += size_at_death * (death_lam - cluster_info[c]['birth'])
+            return stab
 
-        comp_labels = np.array([find(i) for i in range(n)])
-        lbl_map, cid = {}, 0
-        for root in np.unique(comp_labels):
-            lbl_map[root] = cid if np.sum(comp_labels == root) >= mcs else -1
-            if lbl_map[root] >= 0:
-                cid += 1
+        clusters = list(cluster_info.keys())
+        clusters.sort(key=lambda c: cluster_info[c]['birth'], reverse=True)
+        
+        S = {c: compute_stability(c) for c in clusters}
+        S_prop = {}
+        is_selected = {c: False for c in clusters}
 
-        self.labels = np.array([lbl_map[r] for r in comp_labels])
+        for c in clusters:
+            child_stab_sum = sum(S_prop[child] for child in cluster_info[c]['children'])
+            
+            # allow_single_cluster = False equivalent: don't let root be selected
+            if c == 0:
+                S_prop[c] = child_stab_sum
+                is_selected[c] = False
+                continue
+                
+            if S[c] >= child_stab_sum:
+                S_prop[c] = S[c]
+                is_selected[c] = True
+            else:
+                S_prop[c] = child_stab_sum
+                is_selected[c] = False
+
+        # 4. Top-Down Final Pass
+        final_clusters = []
+        stack = [0]
+        while stack:
+            c = stack.pop()
+            if is_selected[c]:
+                final_clusters.append(c)
+            else:
+                stack.extend(cluster_info[c]['children'])
+
+        # 5. Assign exactly which points are in which cluster
+        labels = np.full(n, -1, dtype=int)
+        cid = 0
+        for c in final_clusters:
+            pts = []
+            subtree = [c]
+            while subtree:
+                curr = subtree.pop()
+                pts.extend(p for p, _ in cluster_info[curr]['points'])
+                subtree.extend(cluster_info[curr]['children'])
+            
+            labels[pts] = cid
+            cid += 1
+        
+        self.labels = labels
         self.n_clusters = cid
 
     def fit(self, X):

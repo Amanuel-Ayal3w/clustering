@@ -5,8 +5,8 @@ A comprehensive implementation and comparison of three clustering algorithms —
 ## Dataset
 
 - **File:** `clustering_data.csv`
-- **Size:** 10,000 data points with 2 features (`x`, `y`)
-- **Range:** x ∈ [-74, 721], y ∈ [-17, 455]
+- **Size:** 12,000 data points with 2 features (`x`, `y`)
+- **Range:** x ∈ [-217, 1042], y ∈ [-210, 650]
 
 ### Raw Data & Distributions
 
@@ -62,14 +62,12 @@ Density-Based Spatial Clustering of Applications with Noise. Groups together poi
 
 ![k-distance graph showing the 5th nearest neighbor distance sorted](figures/05_kdist.png)
 
-**Results (eps=11.8, min_samples=5):**
+**Results (eps=13.2, min_samples=5):**
 
 | Cluster | Points |
 |---------|--------|
-| C0 | 3,321 |
-| C1 | 6,381 |
-| C2 | 227 |
-| Noise | 71 (0.7%) |
+| Number of Clusters | 8 |
+| Noise | 101 (0.8%) |
 
 ![DBSCAN clustering with 3 clusters and noise points](figures/06_dbscan.png)
 
@@ -91,15 +89,12 @@ Hierarchical DBSCAN. Extends DBSCAN by building a hierarchy of clusterings at al
 
 | Cluster | Points |
 |---------|--------|
-| C0 | 223 |
-| C1 | 6,185 |
-| C2 | 1,856 |
-| C3 | 1,407 |
-| Noise | 329 (3.3%) |
+| Number of Clusters | 8 |
+| Noise | 53 (0.4%) |
 
 ![HDBSCAN clustering with 4 clusters and noise points](figures/07_hdbscan.png)
 
-> HDBSCAN finds 4 clusters — one more than DBSCAN — because its hierarchical approach can detect clusters at different density levels. It separates the lower band into two distinct regions (C2, C3) that DBSCAN merges.
+> With the corrected stability extraction, HDBSCAN finds exactly 8 clusters, matching DBSCAN but successfully assigning more border points properly (only 53 noise points vs 101 for DBSCAN).
 
 ---
 
@@ -113,11 +108,11 @@ Hierarchical DBSCAN. Extends DBSCAN by building a hierarchy of clusterings at al
 
 | Metric | K-Means | DBSCAN | HDBSCAN |
 |--------|---------|--------|---------|
-| **Silhouette Score** | **0.4479** | -0.0613 | -0.0670 |
-| **Calinski-Harabasz Index** | **12,445** | 1,515 | 1,089 |
-| **Inertia (SSE)** | **79,178,024** | 356,708,827 | 336,617,242 |
-| Clusters Found | 5 | 3 | 4 |
-| Noise Points | 0 | 71 (0.7%) | 329 (3.3%) |
+| **Silhouette Score** | **0.5086** | 0.3264 | 0.3282 |
+| **Calinski-Harabasz Index** | **25,191** | 15,704 | 15,611 |
+| **Inertia (SSE)** | **184,665,095** | 166,686,356 | 169,513,463 |
+| Clusters Found | 5 | 8 | 8 |
+| Noise Points | 0 | 101 (0.8%) | 53 (0.4%) |
 
 All metrics implemented from scratch (no scikit-learn).
 
@@ -133,23 +128,15 @@ All metrics implemented from scratch (no scikit-learn).
 
 ### Why K-Means Performs Best on This Dataset
 
-K-Means achieves the highest Silhouette score (0.45) because this dataset has **roughly spherical, well-separated groups** — exactly what K-Means assumes. It cleanly partitions the data into 5 balanced clusters.
+K-Means achieves the highest Silhouette score (0.5086) because this dataset has **roughly spherical, well-separated groups**. It cleanly partitions the data into 5 balanced clusters.
 
-### Why DBSCAN Finds Only 3 Clusters
+### Why DBSCAN Finds 8 Clusters
 
-DBSCAN uses a **single global density threshold** (`eps=11.8`). At this threshold:
-- The upper and right regions are **density-connected** — chains of nearby points link them into one massive cluster (C1, 6381 pts)
-- Only the bottom strip (C0) and a small dense pocket (C2) are isolated enough to be separate
-- Lowering `eps` would split the big cluster but create hundreds of micro-clusters elsewhere
+DBSCAN uses a **single global density threshold** (`eps=13.2`). At this threshold, it identifies 8 distinct robust regions and marks 101 points as noise.
 
-This is DBSCAN's fundamental limitation: **one `eps` can't handle varying density**.
+### Why HDBSCAN Finds 8 Clusters
 
-### Why HDBSCAN Finds 4 Clusters
-
-HDBSCAN's hierarchical approach discovers one more cluster than DBSCAN:
-- It separates the lower band into two regions (C2, C3) at different density levels
-- It detects the small dense pocket (C0, 223 pts)
-- But the upper-right still merges into one component (C1, 6185 pts)
+HDBSCAN's true hierarchical approach extracts the 8 most stable clusters across *all* density scales. Because it isn't bound by a single `eps` threshold, it isolates the clusters just as well as DBSCAN but assigns border points more intelligently, resulting in a **higher silhouette score (0.3282 vs 0.3264)** and **fewer noise points (53 vs 101)**.
 
 ### Algorithm Strengths & Weaknesses
 
