@@ -195,19 +195,16 @@ uv run python main.py
 
 ```
 clustering/
-├── main.py                 # All algorithms, metrics, and visualizations
+├── main.py                 # Minimal orchestrator
+├── pipeline.py             # Logic for data loading, parameter sweeps, and evals
+├── kmeans.py               # K-Means algorithm class
+├── dbscan.py               # DBSCAN algorithm class
+├── hdbscan_cluster.py      # HDBSCAN algorithm class
+├── metrics.py              # Custom evaluation metric functions
+├── visualization.py        # Helper plotting functions 
 ├── clustering_data.csv     # Input dataset (10,000 points)
 ├── README.md               # This file
-├── pyproject.toml           # Project configuration
+├── pyproject.toml          # Project configuration
 └── figures/                # Generated visualizations
-    ├── 01_raw_data.png
-    ├── 02_density.png
-    ├── 03_elbow.png
-    ├── 04_kmeans.png
-    ├── 05_kdist.png
-    ├── 06_dbscan.png
-    ├── 07_hdbscan.png
-    ├── 08_comparison.png
-    ├── 09_metrics.png
-    └── 10_cluster_sizes.png
+    ├── ... (10 PNG files)
 ```
