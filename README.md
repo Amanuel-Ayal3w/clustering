@@ -128,7 +128,7 @@ All metrics implemented from scratch (no scikit-learn).
 
 ### Why K-Means Performs Best on This Dataset
 
-K-Means achieves the highest Silhouette score (0.5086) because this dataset has **roughly spherical, well-separated groups**. It cleanly partitions the data into 5 balanced clusters.
+K-Means achieves Silhouette score (0.5086) because this dataset has **roughly spherical, well-separated groups**. It cleanly partitions the data into 5 balanced clusters.
 
 ### Why DBSCAN Finds 8 Clusters
 
@@ -177,21 +177,3 @@ uv run python main.py
 - `pandas` — Data loading and manipulation
 - `matplotlib` — Plotting
 - `seaborn` — Enhanced plot aesthetics
-
-## Project Structure
-
-```
-clustering/
-├── main.py                 # Minimal orchestrator
-├── pipeline.py             # Logic for data loading, parameter sweeps, and evals
-├── kmeans.py               # K-Means algorithm class
-├── dbscan.py               # DBSCAN algorithm class
-├── hdbscan_cluster.py      # HDBSCAN algorithm class
-├── metrics.py              # Custom evaluation metric functions
-├── visualization.py        # Helper plotting functions 
-├── clustering_data.csv     # Input dataset (10,000 points)
-├── README.md               # This file
-├── pyproject.toml          # Project configuration
-└── figures/                # Generated visualizations
-    ├── ... (10 PNG files)
-```
